@@ -11,7 +11,7 @@ from tqdm import tqdm
 import config
 from helper import create_one_hot_and_embeddings, get_masked_one_hot_adv
 from prompt_manager import PromptManager  # assume the provided PromptManager is in a separate file
-
+from fastchat.model import get_conversation_template
 
 def calc_loss(model, embeddings_user, embeddings_adv, embeddings_target, targets):
     """Calculate cross-entropy loss"""
