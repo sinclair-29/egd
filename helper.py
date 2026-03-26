@@ -107,9 +107,15 @@ def get_nonascii_toks(tokenizer, device):
 
 def get_masked_one_hot_adv(one_hot_adv, non_ascii_toks_tensor):
     """Mask out non-ASCII tokens from adversarial one-hot"""
-    top_token_ids_tensor_2d = non_ascii_toks_tensor.unsqueeze(0).repeat(20, 1)
-    mask = torch.ones_like(one_hot_adv, dtype=torch.float16)
+    # FIX: Dynamically get the actual length instead of hardcoding 20
+    adv_len = one_hot_adv.shape[0]
+
+    top_token_ids_tensor_2d = non_ascii_toks_tensor.unsqueeze(0).repeat(adv_len, 1)
+
+    # Use the exact same dtype as one_hot_adv to prevent type mismatches
+    mask = torch.ones_like(one_hot_adv, dtype=one_hot_adv.dtype)
     mask.scatter_(1, top_token_ids_tensor_2d, 0.0)
+
     masked_one_hot_adv = one_hot_adv * mask
     return masked_one_hot_adv
 
