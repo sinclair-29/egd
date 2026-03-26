@@ -20,6 +20,33 @@ def calc_loss(model, embeddings_user, embeddings_adv, embeddings_target, targets
     loss = nn.CrossEntropyLoss()(logits[0, loss_slice_start - 1 : -1, :], targets)
     return loss, logits[:, loss_slice_start-1:, :]
 
+def generate_output_with_embeddings(model, tokenizer, user_embeddings, adv_embeddings, device, max_length=300):
+    """
+    Generate model output using embeddings directly.
+    user_embeddings: tensor of shape (1, user_len, hidden_dim)
+    adv_embeddings: tensor of shape (1, adv_len, hidden_dim)
+    """
+    combined_embeds = torch.cat([user_embeddings, adv_embeddings], dim=1)  # (1, total_len, hidden_dim)
+    attention_mask = torch.ones(combined_embeds.shape[:2], dtype=torch.long, device=device)
+
+    # Suppress warnings
+    import warnings
+    warnings.filterwarnings("ignore", message=".*`do_sample` is set to `False`.*")
+
+    generated_output = model.generate(
+        inputs_embeds=combined_embeds,
+        attention_mask=attention_mask,
+        max_length=max_length,
+        pad_token_id=tokenizer.pad_token_id,
+        do_sample=False
+    )
+
+    generated_output_string = tokenizer.decode(
+        generated_output[0][:].cpu().numpy(),
+        skip_special_tokens=True
+    ).strip()
+    return generated_output_string
+
 
 class EGDwithAdamOptimizer(torch.optim.Optimizer):
     """Custom optimizer combining EGD with Adam"""
@@ -101,7 +128,8 @@ def run_single_behavior_attack(
     non_ascii_toks_tensor,
     device,
     num_steps=200,
-    step_size=0.1
+    step_size=0.1,
+    output_freq=10
 ):
     """Run attack on a single behavior"""
 
@@ -200,6 +228,15 @@ def run_single_behavior_attack(
                 best_disc_loss = discrete_loss
                 best_loss_at_epoch = epoch_no
                 effective_adv_one_hot = one_hot_discrete.clone()
+
+        if output_freq and epoch_no % output_freq == 0:
+            with torch.no_grad():
+                gen_output = generate_output_with_embeddings(
+                    model, tokenizer, embeddings_user, embeddings_adv, device
+                )
+                print(f"\n--- Epoch {epoch_no} | Generated response (soft embedding): ---")
+                print(gen_output)
+                print("--- End of generation ---\n")
     
     return effective_adv_one_hot, best_disc_loss, best_loss_at_epoch
 
