@@ -149,18 +149,27 @@ def run_single_behavior_attack(
 
         if output_freq and epoch % output_freq == 0:
             with torch.no_grad():
+                # Slice the suffix to only include the `[/INST]` tag for generation
                 assistant_role_len = manager.get_assistant_role_slice().stop - manager.get_adv_slice().stop
                 gen_suffix_embeds = suffix_embeds[:, :assistant_role_len, :]
+
+                # Concatenate the continuous embeddings
                 full_embeds_for_gen = torch.cat([prefix_embeds, adv_embeds, gen_suffix_embeds], dim=1)
 
+                # Generate using the soft embeddings
                 generated = model.generate(
                     inputs_embeds=full_embeds_for_gen,
-                    max_length=full_embeds_for_gen.shape[1] + 50,
+                    max_new_tokens=128,  # Use max_new_tokens instead of max_length
                     do_sample=False,
                     pad_token_id=tokenizer.pad_token_id
                 )
-                output_str = tokenizer.decode(generated[0][full_embeds_for_gen.shape[1]:], skip_special_tokens=True)
-                print(f"\n--- Epoch {epoch} | Generated: ---\n{output_str}\n---\n")
+
+                # FIX: When using inputs_embeds, `generated[0]` contains ONLY the new tokens.
+                # Do NOT slice out the prompt length.
+                output_str = tokenizer.decode(generated[0], skip_special_tokens=True).strip()
+
+                # Use tqdm.write so the progress bar doesn't glitch and duplicate
+                tqdm.write(f"\n--- Epoch {epoch} | Generated (Soft Embeddings): ---\n{output_str}\n---")
 
         with torch.no_grad():
             masked_one_hot = get_masked_one_hot_adv(one_hot_adv, non_ascii_toks_tensor)
